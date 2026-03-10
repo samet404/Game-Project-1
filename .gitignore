@@ -1,0 +1,5 @@
+build/out/linux.o
+build/out/win.exe
+build/.env
+*.o
+*.exe
