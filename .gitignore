@@ -4,3 +4,4 @@ build/.env
 *.o
 *.exe
 compile_commands.json
+.clangd

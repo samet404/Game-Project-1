@@ -1,3 +1,5 @@
+#include <stdbool.h>
+
 /*
  * Executes given shell command, prints the output and assigns pclose status code as to status pointer.
  * If the status code is not zero, that means program failed with error. The exit status code can be retrieved by using WIF... macros. 
