@@ -3,3 +3,4 @@ build/out/win.exe
 build/.env
 *.o
 *.exe
+compile_commands.json
