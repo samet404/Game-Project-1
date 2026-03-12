@@ -1,0 +1,1 @@
+-I"/home/pc404/Projects/raylib-win/src/external/glfw/include" -I"/home/pc404/Projects/raylib-win/src/external/glfw/src" -I"/home/pc404/Projects/raylib-win/build/raylib/external/glfw/src"

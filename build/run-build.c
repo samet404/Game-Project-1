@@ -1,18 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <stdbool.h>
 #include "./build.h"
 #include <sys/time.h>
-
-
-#define LINUX_COMMON_FLAGS "-Wall -Wextra"
-#define WIN_COMMON_FLAGS "-Wall -Wextra"
+#include <linux/limits.h>
 
 #define LINUX_COMPILER "clang"
 #define WIN_COMPILER "x86_64-w64-mingw32-gcc"
-
-#define SRC_DIR "../src/"
 
 enum Target {
   WIN,
@@ -20,26 +16,29 @@ enum Target {
 };
 char targets[][8] = {"windows", "linux"};
 
+// ======================
+
 int main(int argc, char **argv) {
   if (argc < 2) {
+    printf("ERROR: Couldn't find working directory!");
+    exit(EXIT_FAILURE);
+  }
+  char* absPath = argv[1];
+  printf("WORKING DIRECTORY: %s\n", absPath);
+
+  if (argc < 3) {
     printf("Please provide target: --win or --linux");
     exit(EXIT_FAILURE);
   }
 
   enum Target target;
-  char *compiler;
-  char *commonFlags;
 
-  if (!strcmp(argv[1], "--linux")) {
+  if (!strcmp(argv[2], "--linux")) {
     target = LINUX;
-    compiler = LINUX_COMPILER;
-    commonFlags = LINUX_COMMON_FLAGS;
-  } else if (!strcmp(argv[1], "--win")) {
+  } else if (!strcmp(argv[2], "--win")) {
     target = WIN;
-    compiler = WIN_COMPILER;
-    commonFlags = WIN_COMMON_FLAGS;
   } else {
-    printf("INVALID TARGET SPECIFIED. ONLY USE: --linux or --win");
+    printf("INVALID TARGET SPECIFIED %s\n ONLY USE: --linux or --win", argv[2]);
     exit(EXIT_FAILURE);
   }
 
@@ -51,13 +50,44 @@ int main(int argc, char **argv) {
   gettimeofday(&startTime, NULL);
 
   {
-    char *name = "main";
-    int status = 0;
-    if (target == WIN) cmd(name, &status, WIN_COMPILER" "WIN_COMMON_FLAGS" "SRC_DIR"main.c -o ./out/win.exe");
-    else if (target == LINUX) cmd(name, &status, LINUX_COMPILER" "LINUX_COMMON_FLAGS" "SRC_DIR"/main.c -o ./out/linux.o");
+    if (target == WIN) {
+      {
+        char *name = "main";
+        int status = 0;
 
-    cmd_infoOnError(name, status);
-    cmd_exitOnError(name, status);
+        char *command;
+        asprintf(&command, "%s %s/src/main.c -o %s/build/out/windows/game.exe -v -L%s/deps/raylib-win -I%s/deps/raylib-win/include/ -lraylib.dll -lm -lwinmm -lgdi32 -lopengl32 -Wall -Wextra", WIN_COMPILER, absPath, absPath, absPath, absPath);
+        
+        cmd(name, &status, command);
+        cmd_infoOnError(name, status);
+        cmd_exitOnError(name, status);
+      }
+
+      {
+        char *name = "copy_dll";
+        int status = 0;
+
+        char *command;
+        asprintf(&command, "cp %s/deps/raylib-win/libraylib.dll %s/build/out/windows/libraylib.dll", absPath, absPath);
+        
+        cmd(name, &status, command);
+        cmd_infoOnError(name, status);
+        cmd_exitOnError(name, status);
+      }
+    } else if (target == LINUX) {
+      {
+        char *name = "main";
+        int status = 0;
+        
+        char *command;
+        asprintf(&command, "%s -lraylib -lm -v -L%s/deps/raylib-linux -Wl,-rpath=%s/deps/raylib-linux -I%s/deps/raylib-linux/include/ -Wall -Wextra %s/src/main.c -o %s/build/out/linux/linux.out" , LINUX_COMPILER, absPath, absPath, absPath, absPath, absPath);
+
+        cmd(name, &status, command);
+        
+        cmd_infoOnError(name, status);
+        cmd_exitOnError(name, status);
+      }
+    }
   }
   
 
