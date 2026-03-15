@@ -5,4 +5,4 @@ if [ -z "$WINE_PATH" ]; then
     exit 1
 fi
 
-"$WINE_PATH" ./out/win.exe
+"$WINE_PATH" ./out/windows/game.exe

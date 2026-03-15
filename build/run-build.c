@@ -76,6 +76,18 @@ int main(int argc, char **argv) {
       }
     } else if (target == LINUX) {
       {
+        int status = 0;
+        char *name = "delete_prev_build";
+        char *command;
+        asprintf(&command, "rm -rf %s/build/out/linux/linux.out" , absPath);
+
+        cmd(name, &status, command);
+        
+        cmd_infoOnError(name, status);
+        cmd_exitOnError(name, status);
+      }
+
+      {
         char *name = "main";
         int status = 0;
         
