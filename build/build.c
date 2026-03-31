@@ -5,19 +5,26 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/time.h>
+#include <stdarg.h>
 
 void printCmdTime(char *name, struct timeval startTime) {
   struct timeval endTime;
   gettimeofday(&endTime, NULL);
-  
-  __time_t microSDiff = endTime.tv_usec - startTime.tv_usec;
-    printf("[%s] COMMAND TOOK: %ld second || %ld millisecond || %ld microsecond\n", name,  endTime.tv_sec - startTime.tv_sec, microSDiff / 1000, microSDiff);
+  double elapsedTime;
+
+  // Seconds to milliseconds
+  elapsedTime = (endTime.tv_sec - startTime.tv_sec) * 1000.0;
+  // Microseconds to milliseconds
+  elapsedTime += (endTime.tv_usec - startTime.tv_usec) / 1000.0;
+
+  printf("[%s] COMMAND TOOK: %fms\n", name, elapsedTime);
 }
 
 void cmd(char *name, int *status, char *cmd) {
   printf("[%s] RUNNING COMMAND: %s\n", name, cmd);
   struct timeval startTime;
   gettimeofday(&startTime, NULL);
+
   FILE *fp;
   char *result;
 
@@ -77,4 +84,30 @@ void cmd_exitOnError(char *name, int status) {
 bool cmd_isFailed(int status) {
   if (status > 0) return true;
   else return false;
+}
+
+
+void cmd_append(char **src, const char *fmt, ...) {
+  va_list args;
+  char *new_part = NULL;
+
+  va_start(args, fmt);
+  int n = vasprintf(&new_part, fmt, args); 
+  va_end(args);
+
+  if (n == -1) {
+    perror("vasprintf cmd_append");
+    exit(EXIT_FAILURE);
+  }
+
+  if (n == 0) return;
+
+  if (*src == NULL) *src = malloc(strlen(new_part) + 1);
+  else {
+    *src = realloc(*src, strlen(*src) + strlen(new_part) + 2);
+    strcat(*src, " ");  
+  }
+
+  strcat(*src, new_part);
+  free(new_part);
 }

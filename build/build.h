@@ -19,3 +19,10 @@ void cmd_exitOnError(char* name, int status);
  * returns bool indicates program execution was failed or not
 */
 bool cmd_isFailed(int status);
+/*
+* Appends new string to command 
+*/
+void cmd_append(char **cmd, const char *fmt, ...)
+ __attribute__((format(printf, 2, 3)));
+
+

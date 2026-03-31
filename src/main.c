@@ -49,7 +49,6 @@ typedef struct {
   Vector3 position;
   Vector3 prevVelocity;
   Vector3 velocity;
-  Vector3 dir;
   bool isGrounded;
   float prevWalk;
   float walk;
@@ -57,6 +56,13 @@ typedef struct {
   float height;
   float headTimer;
   char selectedItem;
+  bool crouching;
+  bool jumpPressed;
+  float side;
+  float forward;
+  Vector3 prevDesiredDir;
+  Vector3 desiredDir;
+  Vector3 dir;
 } Player;
 
 typedef struct {
@@ -72,8 +78,8 @@ static void UpdateCameraFPS(Camera *camera, CameraProps *camProps, Player *playe
 static void UpdateCameraFPSPhysics(Camera *camera, TimeState *timeState);
 static void UpdateCameraFPSRender(Camera *camera, TimeState *timeState);
 
-static void UpdatePlayer(Player *player, float rot, char side, char forward, bool jumpPressed, bool crouchHold);
-static void UpdatePlayerPhysics();
+static void UpdatePlayer(Player *player, float rot);
+static void UpdatePlayerPhysics(TimeState *time, Player *player, CameraProps *camProps, Camera *camera);
 static void UpdatePlayerRender();
 
 
@@ -133,51 +139,25 @@ int main(void)
       cameraProps.lookRotation.x -= mouseDelta.x*settings.sensitivity.x;
       cameraProps.lookRotation.y += mouseDelta.y*settings.sensitivity.y;
 
-      char sideway = (IsKeyDown(KEY_D) - IsKeyDown(KEY_A));
-      char forward = (IsKeyDown(KEY_W) - IsKeyDown(KEY_S));
-      bool crouching = IsKeyDown(KEY_LEFT_CONTROL);
+
+      UpdatePlayer(&player, cameraProps.lookRotation.x);
+    
 
       while (timeState.accumulator >= FIXED_TIMESTAMP) {
-      
-        
-
+        UpdatePlayerPhysics(&timeState, &player, &cameraProps, &camera);
         timeState.accumulator -= FIXED_TIMESTAMP;
         timeState.time += FIXED_TIMESTAMP;
       }
-      UpdatePlayer(
-          &player,
-          cameraProps.lookRotation.x,
-          sideway,
-          forward,
-          IsKeyPressed(KEY_SPACE),
-          crouching
-        );
 
       timeState.alpha = timeState.accumulator / FIXED_TIMESTAMP;
-    
 
-      player.height = Lerp(player.height, (crouching ? CROUCH_HEIGHT : STAND_HEIGHT), 20.0f*timeState.delta);
       camera.position = (Vector3){
           player.position.x,
           player.position.y + player.height,
           player.position.z,
       };
 
-      if (player.isGrounded && ((forward != 0) || (sideway != 0)))
-      {
-        player.headTimer += timeState.delta*3.0f;
-        player.walk = Lerp(player.walk, 1.0f, 10.0f*timeState.delta);
-        camera.fovy = Lerp(camera.fovy, 55.0f, 5.0f*timeState.delta);
-      }
-      else
-      {
-        player.walk = Lerp(player.walk, 0.0f, 10.0f*timeState.delta);
-        camera.fovy = Lerp(camera.fovy, 60.0f, 5.0f*timeState.delta);
-      }
-
-      cameraProps.lean.x = Lerp(cameraProps.lean.x, sideway*0.02f, 10.0f*timeState.delta);
-      cameraProps.lean.y = Lerp(cameraProps.lean.y, forward*0.015f, 10.0f*timeState.delta);
-
+      
       UpdateCameraFPS(&camera, &cameraProps, &player);
       //----------------------------------------------------------------------------------
 
@@ -216,18 +196,16 @@ int main(void)
 //----------------------------------------------------------------------------------
 
 // Update body considering current world state
-void UpdatePlayer(Player *player, float rot, char side, char forward, bool jumpPressed, bool crouchHold)
+void UpdatePlayer(Player *player, float rot)
 {
-  Vector2 input = (Vector2){ (float)side, (float)-forward };
+  player->side = (IsKeyDown(KEY_D) - IsKeyDown(KEY_A));
+  player->forward = (IsKeyDown(KEY_W) - IsKeyDown(KEY_S));
+  player->crouching = IsKeyDown(KEY_LEFT_CONTROL);
+  player->jumpPressed = IsKeyPressed(KEY_SPACE);
 
-  // Slow down diagonal movement
-  // if ((side != 0) && (forward != 0)) input = Vector2Normalize(input);
-  
-  printf("input: %f %f\n", input.x, input.y);
+  Vector2 input = (Vector2){ (float)player->side, (float)-player->forward };
 
-  if (!player->isGrounded) player->velocity.y -= GRAVITY*0.006946;
-
-  if (player->isGrounded && jumpPressed)
+   if (player->isGrounded && player->jumpPressed)
   {
       player->velocity.y = JUMP_FORCE;
       player->isGrounded = false;
@@ -239,13 +217,15 @@ void UpdatePlayer(Player *player, float rot, char side, char forward, bool jumpP
 
   Vector3 front = (Vector3){ sinf(rot), 0.f, cosf(rot) };
   Vector3 right = (Vector3){ cosf(-rot), 0.f, sinf(-rot) };
-  printf("front %f %f %f\n", front.x, front.y, front.z);
-  printf("right %f %f %f\n", right.x, right.y, right.z);
-  printf("rot: %f\n", rot);
 
-  Vector3 desiredDir = (Vector3){ input.x*right.x + input.y*front.x, 0.0f, input.x*right.z + input.y*front.z, };
-  printf("desiredDir: %f %f %f\n", desiredDir.x, desiredDir.y, desiredDir.z);
-  player->dir = Vector3Lerp(player->dir, desiredDir, CONTROL*0.006946);
+  player->prevDesiredDir = player->desiredDir;
+  player->desiredDir = (Vector3){ input.x*right.x + input.y*front.x, 0.0f, input.x*right.z + input.y*front.z, };
+}
+
+static void UpdatePlayerPhysics(TimeState *time, Player *player, CameraProps *camProps, Camera *camera) {
+  if (!player->isGrounded) player->velocity.y -= GRAVITY*0.006946;
+
+  player->dir = Vector3Lerp(player->dir, player->desiredDir, CONTROL*0.06946);
 
   float decel = (player->isGrounded ? FRICTION : AIR_DRAG);
   Vector3 hvel = (Vector3){ player->velocity.x*decel, 0.0f, player->velocity.z*decel };
@@ -255,11 +235,11 @@ void UpdatePlayer(Player *player, float rot, char side, char forward, bool jumpP
 
   // This is what creates strafing
   float speed = Vector3DotProduct(hvel, player->dir);
-  printf("speed: %f\n", speed );
+ 
   // Whenever the amount of acceleration to add is clamped by the maximum acceleration constant,
   // a Player can make the speed faster by bringing the direction closer to horizontal velocity angle
   // More info here: https://youtu.be/v3zT3Z5apaM?t=165
-  float maxSpeed = (crouchHold? CROUCH_SPEED : MAX_SPEED);
+  float maxSpeed = (player->crouching ? CROUCH_SPEED : MAX_SPEED);
   float accel = Clamp(maxSpeed - speed, 0.f, MAX_ACCEL*0.006946);
   hvel.x += player->dir.x*accel;
   hvel.z += player->dir.z*accel;
@@ -267,23 +247,35 @@ void UpdatePlayer(Player *player, float rot, char side, char forward, bool jumpP
   player->velocity.x = hvel.x;
   player->velocity.z = hvel.z;
 
-  player->position.x += player->velocity.x*0.006946;
-  player->position.y += player->velocity.y*0.006946;
-  player->position.z += player->velocity.z*0.006946;
-
-  printf("player vel: %f %f %f\n", player->velocity.x, player->velocity.y, player->velocity.z);
-  printf("player pos: %f %f %f\n", player->position.x, player->position.y, player->position.z);
-  
   // Fancy collision system against the floor
   if (player->position.y <= 0.0f)
   {
-      player->position.y = 0.0f;
-      player->velocity.y = 0.0f;
-      player->isGrounded = true; // Enable jumping
+    player->position.y = 0.0f;
+    player->velocity.y = 0.0f;
+    player->isGrounded = true; // Enable jumping
   }
-}
 
-static void UpdatePlayerPhysics() {
+  player->position.x += player->velocity.x*0.06946;
+  player->position.y += player->velocity.y*0.06946;
+  player->position.z += player->velocity.z*0.06946;
+
+  player->prevHeight = player->height;
+  player->height = Lerp(player->height, (player->crouching ? CROUCH_HEIGHT : STAND_HEIGHT), 0.3);
+ 
+  if (player->isGrounded && ((player->forward != 0) || (player->side != 0)))
+  {
+    player->headTimer += time->delta*3.0f;
+    player->walk = Lerp(player->walk, 1.0f, 0.3);
+    camera->fovy = Lerp(camera->fovy, 55.0f, 0.3);
+  }
+  else
+  {
+    player->walk = Lerp(player->walk, 0.0f, 0.3);
+    camera->fovy = Lerp(camera->fovy, 60.0f, 0.3);
+  }
+
+  camProps->lean.x = Lerp(camProps->lean.x, player->side*0.02f, 0.3);
+  camProps->lean.y = Lerp(camProps->lean.y, player->forward*0.015f, 0.3);
 }
 
 static void UpdateCameraFPS(Camera *camera, CameraProps *camProps, Player *player)
